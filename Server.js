@@ -25,7 +25,7 @@ const express = require('express');
 const { Client, LocalAuth } = require('whatsapp-web.js');
 const qrcode = require('qrcode-terminal');
 
-const SENDER_SECRET = process.env.SENDER_SECRET || 'change-this-to-a-random-string';
+const SENDER_SECRET = process.env.SENDER_SECRET || 'Vignesh@Snehal';
 const PORT = process.env.PORT || 3000;
 
 const client = new Client({
