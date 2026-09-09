@@ -24,6 +24,7 @@
 const express = require('express');
 const { Client, LocalAuth } = require('whatsapp-web.js');
 const qrcode = require('qrcode-terminal');
+const QRCode = require('qrcode');
 
 const SENDER_SECRET = process.env.SENDER_SECRET || 'Vignesh@Snehal';
 const PORT = process.env.PORT || 3000;
@@ -55,9 +56,7 @@ const client = new Client({
             '--no-sandbox',
             '--disable-setuid-sandbox',
             '--disable-dev-shm-usage',
-            '--disable-gpu',
-            '--single-process',
-            '--no-zygote'
+            '--disable-gpu'
         ]
     },
     webVersionCache: {
@@ -66,9 +65,13 @@ const client = new Client({
     }
 });
 
+let latestQr = null;
+let clientReady = false;
+
 client.on('qr', (qr) => {
-    console.log('Scan this QR code with the dedicated WhatsApp number:');
-    qrcode.generate(qr, { small: true });
+    latestQr = qr;
+    console.log('New QR code received. Visit /qr on this service\'s URL in a browser to scan a real, properly-scaled image instead of the ASCII art below.');
+    qrcode.generate(qr, { small: true }); // kept as a fallback / sanity check in the logs
 });
 
 client.on('loading_screen', (percent, message) => {
@@ -85,6 +88,8 @@ client.on('auth_failure', (msg) => {
 });
 
 client.on('ready', () => {
+    clientReady = true;
+    latestQr = null;
     console.log('WhatsApp sender is ready.');
 });
 
@@ -100,7 +105,35 @@ app.use(express.json());
 
 // Simple health check so you (or an uptime pinger) can confirm the service is alive.
 app.get('/', (req, res) => {
-    res.json({ ok: true, service: 'aurora-dental-whatsapp-sender' });
+    res.json({ ok: true, service: 'aurora-dental-whatsapp-sender', whatsappReady: clientReady });
+});
+
+// Visit this in a browser (on the phone you're linking, or on any device —
+// zoom into the image and scan it with the WhatsApp app's camera) to get a
+// real, properly-scaled QR code instead of distorted ASCII art in the logs.
+app.get('/qr', async (req, res) => {
+    if (clientReady) {
+        return res.send('<h2>Already linked and ready — no QR code needed.</h2>');
+    }
+    if (!latestQr) {
+        return res.send('<h2>No QR code yet — still starting up. Refresh this page in a few seconds.</h2>');
+    }
+    try {
+        const dataUrl = await QRCode.toDataURL(latestQr, { width: 400, margin: 2 });
+        res.send(`
+      <html>
+        <head><title>Scan to link WhatsApp</title></head>
+        <body style="display:flex;flex-direction:column;align-items:center;justify-content:center;height:100vh;font-family:sans-serif;background:#111;color:#eee;">
+          <h2>Scan with WhatsApp &rarr; Linked Devices &rarr; Link a Device</h2>
+          <img src="${dataUrl}" alt="WhatsApp QR code" style="background:#fff;padding:16px;border-radius:8px;" />
+          <p>This page auto-refreshes every 20 seconds until it's linked.</p>
+          <script>setTimeout(() => location.reload(), 20000);</script>
+        </body>
+      </html>
+    `);
+    } catch (err) {
+        res.status(500).send('Error generating QR image: ' + err);
+    }
 });
 
 app.post('/send', async (req, res) => {
