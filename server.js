@@ -28,9 +28,29 @@ const qrcode = require('qrcode-terminal');
 const SENDER_SECRET = process.env.SENDER_SECRET || 'Vignesh@Snehal';
 const PORT = process.env.PORT || 3000;
 
+// Find the Chrome binary that the "postinstall" step downloaded (npx puppeteer
+// browsers install chrome). The "puppeteer" package (a devDependency here just
+// for this) knows exactly where it put it — far more reliable than guessing.
+function findChromeExecutable() {
+    try {
+        return require('puppeteer').executablePath();
+    } catch (e) {
+        console.log('Could not resolve Chrome path via puppeteer package:', e.message);
+        return undefined;
+    }
+}
+
+const chromeExecutablePath = process.env.PUPPETEER_EXECUTABLE_PATH || findChromeExecutable();
+if (chromeExecutablePath) {
+    console.log('Using Chrome at:', chromeExecutablePath);
+} else {
+    console.log('No explicit Chrome path found — letting Puppeteer resolve its own default.');
+}
+
 const client = new Client({
     authStrategy: new LocalAuth(),
     puppeteer: {
+        executablePath: chromeExecutablePath,
         args: [
             '--no-sandbox',
             '--disable-setuid-sandbox',
